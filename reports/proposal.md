@@ -11,7 +11,9 @@ My learning goal is to practice C and learn more about how relational databases 
 I plan to follow this tutorial, https://cstack.github.io/db_tutorial/, to reach my MVP. From there, I'll research more ways to structure the data to make it easier/faster to save/search. I'm not yet sure what improvements I could make, but by the end of this tutorial, I should hopefully have a better grasp on the topic and some ideas.
 
 ## First Steps
-1. blah
-2. blah
-3. blah
-
+1. Initialize empty ("Hello World") C file
+   - **Deliverable**: C file pushed to repository
+2. Read Part 1 of the tutorial
+   - **Deliverable**: I understand how SQLite works at a high-level
+3. Implement Part 1 of the tutorial
+   - **Deliverable**: C file has a simple, working REPL (read-execute-print loop)
