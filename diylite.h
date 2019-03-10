@@ -51,8 +51,10 @@ typedef enum {
 typedef enum {
 	RECOGNIZED,
 	UNRECOGNIZED,
-	SYNTAX_ERROR
-} SyntaxCheckResult;
+	SYNTAX_ERROR,
+	STRING_TOO_LONG,
+	NEGATIVE_ID
+} ParsingResult;
 
 /* status code for the execution of a statement */
 typedef enum { 
@@ -69,8 +71,9 @@ typedef enum {
 /* set of columns that make up a row in the hardcoded testing table*/
 typedef struct {
 	uint32_t id;
-	char username[COLUMN_USERNAME_SIZE];
-	char email[COLUMN_EMAIL_SIZE];
+	/* the +1 makes space for the null character */
+	char username[COLUMN_USERNAME_SIZE + 1];
+	char email[COLUMN_EMAIL_SIZE + 1];
 } Row;
 
 /* components of a SQL statement */
@@ -90,13 +93,14 @@ InputBuffer* new_input_buffer();
 void print_prompt();
 void read_input(InputBuffer* input_buffer);
 MetaCommandResult implement_command(InputBuffer* input_buffer);
-SyntaxCheckResult check_statement(InputBuffer* input_buffer,
+ParsingResult check_insert(InputBuffer* input_buffer, Statement* statement);
+ParsingResult check_statement(InputBuffer* input_buffer,
                                 Statement* statement);
+ExecuteResult execute_insert(Statement* statement, Table* table);
+ExecuteResult execute_select(Statement* statement, Table* table);
 ExecuteResult execute_statement(Statement* statement, Table* table);
 void serialize_row(Row* source, void* destination);
 void deserialize_row(void* source, Row* destination);
 void* row_slot(Table* table, uint32_t row_num);
-ExecuteResult execute_insert(Statement* statement, Table* table);
-ExecuteResult execute_select(Statement* statement, Table* table);
 Table* new_table();
 void print_row(Row* row);

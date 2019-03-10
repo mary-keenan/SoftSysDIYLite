@@ -71,23 +71,54 @@ MetaCommandResult implement_command(InputBuffer* input_buffer) {
 }
 
 /* 
+	determines the validity of the SQL insert statement
+
+	input_buffer: pointer to InputBuffer with insert command
+	statement: pointer to a Statement struct with the command type
+	returns: an enum representing whether the command was parsed correctly
+*/
+ParsingResult check_insert(InputBuffer* input_buffer, Statement* statement) {
+	statement->type = STATEMENT_INSERT;
+
+	/* strtok() splits the given string once with each call,
+	returning the new split-off part each time */
+	char* keyword = strtok(input_buffer->buffer, " ");
+	char* id_string = strtok(NULL, " ");
+	char* username = strtok(NULL, " ");
+	char* email = strtok(NULL, " ");
+
+	/* check that the statement had all of the required fields */
+	if (id_string == NULL || username == NULL || email == NULL) {
+		return SYNTAX_ERROR;
+	}
+
+	int id = atoi(id_string);
+
+	/* I know dropping the {} is bad practice...but it looks better */
+	if (id < 0) return NEGATIVE_ID;
+	if (strlen(username) > COLUMN_USERNAME_SIZE) return STRING_TOO_LONG;
+	if (strlen(email) > COLUMN_EMAIL_SIZE) return STRING_TOO_LONG;
+
+	/* assign the statement values to the Statement struct */
+	statement->row_to_insert.id = id;
+	strcpy(statement->row_to_insert.username, username);
+	strcpy(statement->row_to_insert.email, email);
+
+	return RECOGNIZED;
+}
+
+
+/* 
 	determines the validity of the SQL statement
 
 	input_buffer: pointer to InputBuffer with command
 	statement: pointer to a Statement struct with the command type
-	returns: an enum representing whether the command was recognized
+	returns: an enum representing whether the command was parsed correctly
 */
-SyntaxCheckResult check_statement(InputBuffer* input_buffer,
-                                Statement* statement) {
+ParsingResult check_statement(InputBuffer* input_buffer, Statement* statement) {
 	/* strncmp used because insert will be followed by data */
 	if (strncmp(input_buffer->buffer, "insert", 6) == 0) {
-		statement->type = STATEMENT_INSERT;
-
-		/* check that the inputted statement matches the insert format */
-		int num_args_assigned = sscanf(input_buffer->buffer, "insert %d %s %s", &(statement->row_to_insert.id), statement->row_to_insert.username, statement->row_to_insert.email);
-		if (num_args_assigned < 3) return SYNTAX_ERROR;
-
-		return RECOGNIZED;
+		return check_insert(input_buffer, statement);
 	} 
 	/* */
 	else if (strcmp(input_buffer->buffer, "select") == 0) {
@@ -243,8 +274,14 @@ int main(int argc, char* argv[]) {
 				printf("Look at you, trying to invent statements: '%s'\n", input_buffer->buffer);	
 				continue;
 			case (SYNTAX_ERROR):
-				printf("That syntax is wack.\n");
+				printf("That syntax is wack\n");
 		        continue;
+	        case (STRING_TOO_LONG):
+	        	printf("Your strings are coming on a little too long\n");
+	        	continue;
+        	case (NEGATIVE_ID):
+        		printf("I like my IDs like I like my attitudes: positive\n");
+        		continue;
 		}
 
 		/* execute recognized statement */
@@ -253,7 +290,7 @@ int main(int argc, char* argv[]) {
 				printf("Executed!\n");
 				break;
 			case (EXECUTE_TABLE_FULL):
-				printf("Error -- the given table is full.\n");
+				printf("Error: the table ate too much for dinner\n");
 				break;
     	}
 	}
