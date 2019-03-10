@@ -14,37 +14,6 @@ at Olin College of Engineering.
 #include <string.h>
 #include "diylite.h"
 
-
-/* wrapper needed to store the result of getline() */
-typedef struct InputBuffer_t {
-	char* buffer;
-	size_t buffer_length;
-	ssize_t input_length;
-} InputBuffer;
-
-/* command result codes */
-typedef enum {
-	META_COMMAND_SUCCESS,
-	META_COMMAND_UNRECOGNIZED
-} MetaCommandResult;
-
-/* status code for determining a statement type */
-typedef enum {
-	RECOGNIZED,
-	UNRECOGNIZED
-} TypeCheckResult;
-
-/* commands that the SQL compiler understands */
-typedef enum {
-	STATEMENT_INSERT,
-	STATEMENT_SELECT
-} StatementType;
-
-/* commands that the SQL compiler understands */
-typedef struct {
-	StatementType type;
-} Statement;
-
 /* 
 	initializes an empty InputBuffer struct
  
@@ -102,19 +71,26 @@ MetaCommandResult implement_command(InputBuffer* input_buffer) {
 }
 
 /* 
-	determines the type of SQL statement, or if it's unrecognized
+	determines the validity of the SQL statement
 
 	input_buffer: pointer to InputBuffer with command
 	statement: pointer to a Statement struct with the command type
 	returns: an enum representing whether the command was recognized
 */
-TypeCheckResult type_check_statement(InputBuffer* input_buffer,
+SyntaxCheckResult check_statement(InputBuffer* input_buffer,
                                 Statement* statement) {
 	/* strncmp used because insert will be followed by data */
 	if (strncmp(input_buffer->buffer, "insert", 6) == 0) {
 		statement->type = STATEMENT_INSERT;
+
+		/* check that the inputted statement matches the insert format */
+		int num_args_assigned = sscanf(input_buffer->buffer, "insert %d %s %s", &(statement->row_to_insert.id), statement->row_to_insert.username, statement->row_to_insert.email);
+		if (num_args_assigned < 3) return SYNTAX_ERROR;
+
 		return RECOGNIZED;
-	} else if (strcmp(input_buffer->buffer, "select") == 0) {
+	} 
+	/* */
+	else if (strcmp(input_buffer->buffer, "select") == 0) {
 		statement->type = STATEMENT_SELECT;
 		return RECOGNIZED;
 	}
@@ -123,27 +99,122 @@ TypeCheckResult type_check_statement(InputBuffer* input_buffer,
 }
 
 /* 
-	executes the SQL statement
+	executes the INSERT SQL statement
 
-	statement: pointer to a Statement struct with the command type
+	statement: pointer to a Statement struct with the command
+	table: pointer to a Table struct with the desired data
+	returns: status code signifying the success of execution
 */
-void execute_statement(Statement* statement) {
-  switch (statement->type) {
-    case (STATEMENT_INSERT):
-      printf("theoretical insert\n");
-      break;
-    case (STATEMENT_SELECT):
-      printf("theoretical select\n");
-      break;
+ExecuteResult execute_insert(Statement* statement, Table* table) {
+  if (table->num_rows >= TABLE_MAX_ROWS) {
+    return EXECUTE_TABLE_FULL;
   }
+
+  /* make a copy of the address ??? */
+  Row* row_to_insert = &(statement->row_to_insert);
+  /* insert the new row into the given table*/
+  serialize_row(row_to_insert, row_slot(table, table->num_rows));
+  table->num_rows += 1;
+
+  return EXECUTE_SUCCESS;
+}
+
+/* 
+	executes the SELECT SQL statement
+
+	statement: pointer to a Statement struct with the command
+	table: pointer to a Table struct with the desired data
+	returns: status code signifying the success of execution
+*/
+ExecuteResult execute_select(Statement* statement, Table* table) {
+  Row row;
+  /* it "selects" every single row */
+  for (uint32_t i = 0; i < table->num_rows; i++) {
+    deserialize_row(row_slot(table, i), &row);
+    print_row(&row);
+  }
+  return EXECUTE_SUCCESS;
 }
 
 
-int main (int argc, char* argv[]) {
+/* 
+	call functions to execute the SQL statement based on the keyword
+
+	statement: pointer to a Statement struct with the command type
+	table: pointer to a Table struct with the desired data
+	returns: status code signifying the success of execution
+*/
+ExecuteResult execute_statement(Statement* statement, Table* table) {
+  switch (statement->type) {
+    case (STATEMENT_INSERT):
+      return execute_insert(statement, table);
+    case (STATEMENT_SELECT):
+      return execute_select(statement, table);
+  }
+}
+
+/* 
+	serializes the given row at the given location
+
+	source: pointer to the Row we want to serialize
+	destination: pointer to where the serialized row should be stored
+*/
+void serialize_row(Row* source, void* destination) {
+  memcpy(destination + ID_OFFSET, &(source->id), ID_SIZE);
+  memcpy(destination + USERNAME_OFFSET, &(source->username), USERNAME_SIZE);
+  memcpy(destination + EMAIL_OFFSET, &(source->email), EMAIL_SIZE);
+}
+
+/* 
+	deserializes the given row at the given location
+
+	source: pointer to the serialized Row we want to deserialize
+	destination: pointer to where the deserialized row should be stored
+*/
+void deserialize_row(void* source, Row* destination) {
+	memcpy(&(destination->id), source + ID_OFFSET, ID_SIZE);
+	memcpy(&(destination->username), source + USERNAME_OFFSET, USERNAME_SIZE);
+	memcpy(&(destination->email), source + EMAIL_OFFSET, EMAIL_SIZE);
+}
+
+/* 
+	finds the memory location of the [row_num] row in the table
+
+	table: pointer to a table
+	row_num: row number to retrieve
+	returns: pointer to the location of the desired row
+*/
+void* row_slot(Table* table, uint32_t row_num) {
+	uint32_t page_num = row_num / ROWS_PER_PAGE;
+	void* page = table->pages[page_num];
+	if (!page) {
+		// only allocate memory when we try to access page
+		page = table->pages[page_num] = malloc(PAGE_SIZE); // TODO this needs to be freed
+	}
+	uint32_t row_offset = row_num % ROWS_PER_PAGE;
+	uint32_t byte_offset = row_offset * ROW_SIZE;
+	return page + byte_offset;
+}
+
+/* initializes and returns an empty Table struct */
+Table* new_table() {
+	Table* table = malloc(sizeof(Table));
+	table->num_rows = 0;
+	return table;
+}
+
+/* prints the columns in the given row */
+void print_row(Row* row) {
+	printf("(%d, %s, %s)\n", row->id, row->username, row->email);
+}
+
+/* */
+int main(int argc, char* argv[]) {
 
 	/* initialize variables */
 	Statement statement;
 	InputBuffer* input_buffer = new_input_buffer();
+	Table* table = new_table();
 
 	/* read standard input into the buffer until "-exit" is read */
 	while (true) {
@@ -165,17 +236,26 @@ int main (int argc, char* argv[]) {
 		}
 
 		/* if we've gotten here, the input was not a command */
-		switch (type_check_statement(input_buffer, &statement)) {
+		switch (check_statement(input_buffer, &statement)) {
 			case (RECOGNIZED):
 				break;
 			case (UNRECOGNIZED):
 				printf("Look at you, trying to invent statements: '%s'\n", input_buffer->buffer);	
 				continue;
+			case (SYNTAX_ERROR):
+				printf("That syntax is wack.\n");
+		        continue;
 		}
 
 		/* execute recognized statement */
-		execute_statement(&statement);
-		printf("Executed\n");
+		switch (execute_statement(&statement, table)) {
+			case (EXECUTE_SUCCESS):
+				printf("Executed!\n");
+				break;
+			case (EXECUTE_TABLE_FULL):
+				printf("Error -- the given table is full.\n");
+				break;
+    	}
 	}
 }
 
