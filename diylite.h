@@ -13,6 +13,9 @@ at Olin College of Engineering.
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 /* values for a Row struct */
 #define COLUMN_USERNAME_SIZE 32
@@ -82,9 +85,16 @@ typedef struct {
 	Row row_to_insert;
 } Statement;
 
+/* components of the table pager (keeps track of pages in table) */
+typedef struct {
+	int file_descriptor;
+	uint32_t file_length;
+	void* pages[TABLE_MAX_PAGES];
+} Pager;
+
 /* components of a SQL table */
 typedef struct {
-  void* pages[TABLE_MAX_PAGES];
+  Pager* pager;
   uint32_t num_rows;
 } Table;
 
@@ -92,7 +102,7 @@ typedef struct {
 InputBuffer* new_input_buffer();
 void print_prompt();
 void read_input(InputBuffer* input_buffer);
-MetaCommandResult implement_command(InputBuffer* input_buffer);
+MetaCommandResult implement_command(InputBuffer* input_buffer, Table* table);
 ParsingResult check_insert(InputBuffer* input_buffer, Statement* statement);
 ParsingResult check_statement(InputBuffer* input_buffer,
                                 Statement* statement);
@@ -102,5 +112,12 @@ ExecuteResult execute_statement(Statement* statement, Table* table);
 void serialize_row(Row* source, void* destination);
 void deserialize_row(void* source, Row* destination);
 void* row_slot(Table* table, uint32_t row_num);
-Table* new_table();
 void print_row(Row* row);
+
+
+/* Pager function declarations */
+Pager* pager_open(const char* filename);
+void* get_page(Pager* pager, uint32_t page_num);
+void pager_flush(Pager* pager, uint32_t page_num, uint32_t size);
+Table* open_database();
+void close_database(Table* table);

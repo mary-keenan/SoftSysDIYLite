@@ -8,11 +8,7 @@ at Olin College of Engineering.
 
 */
 
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "diylite.h"
+#include "diylite.h" 
 
 /* 
 	initializes an empty InputBuffer struct
@@ -60,10 +56,12 @@ void read_input(InputBuffer* input_buffer) {
 	implements a command if recognized; otherwise, returns a failure code
 
 	input_buffer: pointer to InputBuffer with command
+	table: pointer to Table struct with DB data
 	returns: a command result code
 */
-MetaCommandResult implement_command(InputBuffer* input_buffer) {
+MetaCommandResult implement_command(InputBuffer* input_buffer, Table* table) {
 	if (strcmp(input_buffer->buffer, "mk_exit") == 0) {
+		close_database(table);
 		exit(EXIT_SUCCESS);
 	} else {
 		return META_COMMAND_UNRECOGNIZED;
@@ -120,7 +118,6 @@ ParsingResult check_statement(InputBuffer* input_buffer, Statement* statement) {
 	if (strncmp(input_buffer->buffer, "insert", 6) == 0) {
 		return check_insert(input_buffer, statement);
 	} 
-	/* */
 	else if (strcmp(input_buffer->buffer, "select") == 0) {
 		statement->type = STATEMENT_SELECT;
 		return RECOGNIZED;
@@ -166,7 +163,6 @@ ExecuteResult execute_select(Statement* statement, Table* table) {
   }
   return EXECUTE_SUCCESS;
 }
-
 
 /* 
 	call functions to execute the SQL statement based on the keyword
@@ -217,21 +213,10 @@ void deserialize_row(void* source, Row* destination) {
 */
 void* row_slot(Table* table, uint32_t row_num) {
 	uint32_t page_num = row_num / ROWS_PER_PAGE;
-	void* page = table->pages[page_num];
-	if (!page) {
-		// only allocate memory when we try to access page
-		page = table->pages[page_num] = malloc(PAGE_SIZE); // TODO this needs to be freed
-	}
+	void* page = get_page(table->pager, page_num);
 	uint32_t row_offset = row_num % ROWS_PER_PAGE;
 	uint32_t byte_offset = row_offset * ROW_SIZE;
 	return page + byte_offset;
-}
-
-/* initializes and returns an empty Table struct */
-Table* new_table() {
-	Table* table = malloc(sizeof(Table));
-	table->num_rows = 0;
-	return table;
 }
 
 /* prints the columns in the given row */
@@ -242,10 +227,17 @@ void print_row(Row* row) {
 /* */
 int main(int argc, char* argv[]) {
 
+	/* require that the user specify a DB filename */
+	if (argc < 2) {
+		printf("Must supply a database filename.\n");
+		exit(EXIT_FAILURE);
+	}
+
 	/* initialize variables */
 	Statement statement;
 	InputBuffer* input_buffer = new_input_buffer();
-	Table* table = new_table();
+	char* filename = argv[1];
+	Table* table = open_database(filename);
 
 	/* read standard input into the buffer until "-exit" is read */
 	while (true) {
@@ -257,7 +249,7 @@ int main(int argc, char* argv[]) {
 		/* determine if the input was a command or statement (commands
 		have a "mk_" prefix */
 		if (input_buffer->buffer[0] == 'm' && input_buffer->buffer[1] == 'k') {
-			switch (implement_command(input_buffer)) {
+			switch (implement_command(input_buffer, table)) {
 				case (META_COMMAND_SUCCESS):
 					continue;
 				case (META_COMMAND_UNRECOGNIZED):
