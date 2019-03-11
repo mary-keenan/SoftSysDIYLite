@@ -63,6 +63,14 @@ MetaCommandResult implement_command(InputBuffer* input_buffer, Table* table) {
 	if (strcmp(input_buffer->buffer, "mk_exit") == 0) {
 		close_database(table);
 		exit(EXIT_SUCCESS);
+	} else if (strcmp(input_buffer->buffer, "mk_btree") == 0) {
+		printf("Tree:\n");
+		print_leaf(get_page(table->pager, 0));
+		return META_COMMAND_SUCCESS;
+	} else if (strcmp(input_buffer->buffer, "mk_constants") == 0) {
+	    printf("Constants:\n");
+	    print_constants();
+	    return META_COMMAND_SUCCESS;
 	} else {
 		return META_COMMAND_UNRECOGNIZED;
 	}
@@ -134,17 +142,18 @@ ParsingResult check_statement(InputBuffer* input_buffer, Statement* statement) {
 	returns: status code signifying the success of execution
 */
 ExecuteResult execute_insert(Statement* statement, Table* table) {
-	if (table->num_rows >= TABLE_MAX_ROWS) {
-		return EXECUTE_TABLE_FULL;
+	void* node = get_page(table->pager, table->root_page_num);
+	
+	/* check if the node is full */
+	if ((*get_leaf_num_cells(node) >= LEAF_NODE_MAX_CELLS)) {		return EXECUTE_TABLE_FULL;
 	}
 
 	/* create objects necessary to execute the insert statement */
 	Row* row_to_insert = &(statement->row_to_insert);
 	Cursor* cursor = get_table_end(table);
 
-	/* insert the new row into the given table*/
-	serialize_row(row_to_insert, get_cursor_value(cursor));
-	table->num_rows += 1;
+	/* insert the new cell into the given node */
+	leaf_insert(cursor, row_to_insert->id, row_to_insert);
 
 	/* free the Cursor object to prevent a memory leak */
 	free(cursor);
@@ -163,13 +172,13 @@ ExecuteResult execute_select(Statement* statement, Table* table) {
   
 	/* create objects necessary to execute the select statement */
 	Row row;
-	Cursor* cursor = get_table_end(table);
+	Cursor* cursor = get_table_start(table);
   
   /* it "selects" every single row */
 	while (!(cursor->end_of_table)) {
 		deserialize_row(get_cursor_value(cursor), &row);
 		print_row(&row);
-		get_cursor_advance(cursor);
+		advance_cursor(cursor);
 	}
 
 	/* free the Cursor object to prevent a memory leak */
@@ -188,9 +197,9 @@ ExecuteResult execute_select(Statement* statement, Table* table) {
 ExecuteResult execute_statement(Statement* statement, Table* table) {
   switch (statement->type) {
     case (STATEMENT_INSERT):
-      return execute_insert(statement, table);
+    	return execute_insert(statement, table);
     case (STATEMENT_SELECT):
-      return execute_select(statement, table);
+    	return execute_select(statement, table);
   }
 }
 

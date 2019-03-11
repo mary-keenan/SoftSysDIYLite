@@ -39,3 +39,90 @@ Notes from Part 7 - Introduction to the B-Tree
 	the root node will exist in page 0
 */
 
+
+/* returns a pointer to the field in the node w/ the number of 
+cells in the leaf node -- this is both a getter and a setter */
+uint32_t* get_leaf_num_cells(void* node) {
+	return (char *) node + LEAF_NODE_NUM_CELLS_OFFSET;
+}
+
+/* returns a pointer to the location of the given cell_num
+in the leaf node  -- this is both a getter and a setter */
+void* get_leaf_cell(void* node, uint32_t cell_num) {
+	return (char *) node + LEAF_NODE_HEADER_SIZE + cell_num * LEAF_NODE_CELL_SIZE;
+}
+
+/* returns a pointer to the key value of the given cell_num
+in the leaf node  -- this is both a getter and a setter */
+uint32_t* get_leaf_key(void* node, uint32_t cell_num) {
+	return get_leaf_cell(node, cell_num);
+}
+
+/* returns a pointer to the value of the given cell_num in the
+leaf node  -- this is both a getter and a setter */
+void* get_leaf_value(void* node, uint32_t cell_num) {
+	return get_leaf_cell(node, cell_num) + LEAF_NODE_KEY_SIZE;
+}
+
+/* sets the number of cells in the leaf node to 0 -- this is both 
+a getter and a setter */
+void initialize_leaf_node(void* node) { 
+	*get_leaf_num_cells(node) = 0; 
+}
+
+/* 
+	inserts key/value pair into a specified leaf node
+
+	cursor: pointer to Cursor struct specifying insert location
+	key: key to insert in key cell
+	value: value to insert in value cell
+*/
+void leaf_insert(Cursor* cursor, uint32_t key, Row* value) {
+	
+	void* node = get_page(cursor->table->pager, cursor->page_num);
+	uint32_t num_cells = *get_leaf_num_cells(node);
+
+	/* check if the node is full (12 cells) before trying to insert 
+	-- this is already checked in execute_insert(), so it's a bit 
+	redundant, but I guess we should err on the side of caution */	
+	if (num_cells >= LEAF_NODE_MAX_CELLS) {
+	    printf("Theoretically would split the leaf node.\n");
+	    exit(EXIT_FAILURE);
+	}
+
+	/* make room for the new cell if necessary by moving existing cells 
+	to the right until we get to the cell we want to insert to */
+	if (cursor->cell_num < num_cells) {
+		for (uint32_t i = num_cells; i > cursor->cell_num; i--) {
+			memcpy(get_leaf_cell(node, i), get_leaf_cell(node, i - 1),
+			LEAF_NODE_CELL_SIZE);
+		}
+	}
+
+	/* insert the key/value pair */
+	*(get_leaf_num_cells(node)) += 1;
+	*(get_leaf_key(node, cursor->cell_num)) = key;
+	serialize_row(value, get_leaf_value(node, cursor->cell_num));
+}
+
+/* prints the constants currently being used */
+void print_constants() {
+	printf("ROW_SIZE: %ld\n", ROW_SIZE);
+	printf("COMMON_NODE_HEADER_SIZE: %ld\n", COMMON_NODE_HEADER_SIZE);
+	printf("LEAF_NODE_HEADER_SIZE: %ld\n", LEAF_NODE_HEADER_SIZE);
+	printf("LEAF_NODE_CELL_SIZE: %ld\n", LEAF_NODE_CELL_SIZE);
+	printf("LEAF_NODE_SPACE_FOR_CELLS: %ld\n", LEAF_NODE_SPACE_FOR_CELLS);
+	printf("LEAF_NODE_MAX_CELLS: %ld\n", LEAF_NODE_MAX_CELLS);
+}
+
+/* print a visualization of the B-tree */
+void print_leaf(void* node) {
+	uint32_t num_cells = *get_leaf_num_cells(node);
+	printf("leaf (size %d)\n", num_cells);
+	for (uint32_t i = 0; i < num_cells; i++) {
+		uint32_t key = *get_leaf_key(node, i);
+		printf("  - %d : %d\n", i, key);
+	}
+}
+
+

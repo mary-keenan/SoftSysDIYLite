@@ -17,11 +17,12 @@ at Olin College of Engineering.
 #include <fcntl.h>
 #include <unistd.h>
 
+
 /* values for a Row struct */
 #define COLUMN_USERNAME_SIZE 32
 #define COLUMN_EMAIL_SIZE 255
 
-/* these values give structure to the hardcoded example table */
+/* values that structure the hardcoded example table */
 #define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
 #define ID_SIZE size_of_attribute(Row, id)
 #define USERNAME_SIZE size_of_attribute(Row, username)
@@ -34,8 +35,37 @@ at Olin College of Engineering.
 /* values related to a Table struct */
 #define PAGE_SIZE 4096 /* OS pages are also 4KB -> DB page is undivided*/
 #define TABLE_MAX_PAGES 100 /* arbitrary limit for now */
-#define ROWS_PER_PAGE (PAGE_SIZE / ROW_SIZE)
-#define TABLE_MAX_ROWS (ROWS_PER_PAGE * TABLE_MAX_PAGES)
+
+/* common node headers */
+#define NODE_TYPE_SIZE sizeof(uint8_t)
+#define NODE_TYPE_OFFSET 0
+#define IS_ROOT_SIZE sizeof(uint8_t)
+#define IS_ROOT_OFFSET NODE_TYPE_SIZE
+#define PARENT_POINTER_SIZE sizeof(uint32_t)
+#define PARENT_POINTER_OFFSET IS_ROOT_OFFSET + IS_ROOT_SIZE
+#define COMMON_NODE_HEADER_SIZE NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE
+
+/* leaf node headers */
+#define LEAF_NODE_NUM_CELLS_SIZE sizeof(uint32_t)
+#define LEAF_NODE_NUM_CELLS_OFFSET COMMON_NODE_HEADER_SIZE
+#define LEAF_NODE_HEADER_SIZE COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE
+
+/* leaf node body -- currently, 12 values can be stored in
+one leaf node with a bit of leftover (wasted) space at the end,
+because we don't want to split up cells between nodes/pages 
+
+refer to this image to get a visualization of the space allocation
+in each node:
+https://cstack.github.io/db_tutorial/assets/images/leaf-node-format.png 
+*/
+#define LEAF_NODE_KEY_SIZE sizeof(uint32_t)
+#define LEAF_NODE_KEY_OFFSET 0
+#define LEAF_NODE_VALUE_SIZE ROW_SIZE
+#define LEAF_NODE_VALUE_OFFSET LEAF_NODE_KEY_OFFSET + LEAF_NODE_KEY_SIZE
+#define LEAF_NODE_CELL_SIZE LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE
+#define LEAF_NODE_SPACE_FOR_CELLS PAGE_SIZE - LEAF_NODE_HEADER_SIZE
+#define LEAF_NODE_MAX_CELLS LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE
+
 
 /* wrapper needed to store the result of getline() */
 typedef struct InputBuffer_t {
@@ -89,21 +119,30 @@ typedef struct {
 typedef struct {
 	int file_descriptor;
 	uint32_t file_length;
+	uint32_t num_pages;
 	void* pages[TABLE_MAX_PAGES];
 } Pager;
 
 /* components of a SQL table */
 typedef struct {
   Pager* pager;
-  uint32_t num_rows;
+  uint32_t root_page_num;
 } Table;
 
 /* represents a location within the table */
 typedef struct {
   Table* table;
-  uint32_t row_num;
+  uint32_t page_num; /* location of node */
+  uint32_t cell_num; /* location of value */
   bool end_of_table;
 } Cursor;
+
+/* helps us keep track of node type */
+typedef enum { 
+	NODE_INTERNAL,
+	NODE_LEAF 
+} NodeType;
+
 
 /* function declarations */
 InputBuffer* new_input_buffer();
@@ -119,12 +158,12 @@ ExecuteResult execute_statement(Statement* statement, Table* table);
 void serialize_row(Row* source, void* destination);
 void deserialize_row(void* source, Row* destination);
 void print_row(Row* row);
-
+void print_constants();
 
 /* Pager function declarations */
-Pager* pager_open(const char* filename);
+Pager* open_pager(const char* filename);
 void* get_page(Pager* pager, uint32_t page_num);
-void pager_flush(Pager* pager, uint32_t page_num, uint32_t size);
+void flush_pager(Pager* pager, uint32_t page_num);
 Table* open_database();
 void close_database(Table* table);
 
@@ -132,4 +171,14 @@ void close_database(Table* table);
 Cursor* get_table_start(Table* table);
 Cursor* get_table_end(Table* table);
 void* get_cursor_value(Cursor* cursor);
-void get_cursor_advance(Cursor* cursor);
+void advance_cursor(Cursor* cursor);
+
+/* B-Tree function declarations*/
+uint32_t* get_leaf_num_cells(void* node);
+void* get_leaf_cell(void* node, uint32_t cell_num);
+uint32_t* get_leaf_key(void* node, uint32_t cell_num) ;
+void* get_leaf_value(void* node, uint32_t cell_num);
+void initialize_leaf_node(void* node);
+void leaf_insert(Cursor* cursor, uint32_t key, Row* value);
+void print_constants();
+void print_leaf(void* node);

@@ -19,8 +19,13 @@ at Olin College of Engineering.
 Cursor* get_table_start(Table* table) {
 	Cursor* cursor = malloc(sizeof(Cursor));
 	cursor->table = table;
-	cursor->row_num = 0;
-	cursor->end_of_table = (table->num_rows == 0);
+	cursor->page_num = table->root_page_num;
+	cursor->cell_num = 0;
+
+	/* initialize the start cursor to point at the root node */
+	void* root_node = get_page(table->pager, table->root_page_num);
+	uint32_t num_cells = *get_leaf_num_cells(root_node);
+	cursor->end_of_table = (num_cells == 0);
 
 	return cursor;
 }
@@ -34,35 +39,41 @@ Cursor* get_table_start(Table* table) {
 Cursor* get_table_end(Table* table) {
 	Cursor* cursor = malloc(sizeof(Cursor));
 	cursor->table = table;
-	cursor->row_num = table->num_rows;
+	cursor->page_num = table->root_page_num;
 	cursor->end_of_table = true;
+
+	/* initialize the end cursor to point at the root node */
+	void* root_node = get_page(table->pager, table->root_page_num);
+	uint32_t num_cells = *get_leaf_num_cells(root_node);
+	cursor->cell_num = num_cells;
 
 	return cursor;
 }
 
 /* 
-	finds the memory location of the [row_num] row in the table
+	finds the memory location of the cursor's page + cell number
 
 	cursor: pointer to a Cursor struct for the current Table
-	returns: pointer to the location of the desired row
+	returns: pointer to the location of the cell
 */
 void* get_cursor_value(Cursor* cursor) {
-	uint32_t row_num = cursor->row_num;
-	uint32_t page_num = row_num / ROWS_PER_PAGE;
+	uint32_t page_num = cursor->page_num;
 	void* page = get_page(cursor->table->pager, page_num);
-	uint32_t row_offset = row_num % ROWS_PER_PAGE;
-	uint32_t byte_offset = row_offset * ROW_SIZE;
-	return page + byte_offset;
+	return get_leaf_value(page, cursor->cell_num);
 }
 
 /* 
-	increment the row number (position) of the given Cursor by one
+	increment the cell number of the given Cursor by one
 
 	cursor: pointer to a Cursor struct for the current Table
 */
-void get_cursor_advance(Cursor* cursor) {
-	cursor->row_num += 1;
-	if (cursor->row_num >= cursor->table->num_rows) {
+void advance_cursor(Cursor* cursor) {
+	uint32_t page_num = cursor->page_num;
+	void* node = get_page(cursor->table->pager, page_num);
+	cursor->cell_num += 1;
+
+	/* check to see if the cell_num is out of the table (too high) */
+	if (cursor->cell_num >= (*get_leaf_num_cells(node))) {
 		cursor->end_of_table = true;
 	}
 }

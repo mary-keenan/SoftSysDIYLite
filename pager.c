@@ -17,7 +17,7 @@ at Olin College of Engineering.
 	filename: pointer to a string containing the DB filename
 	returns: pointer to a Pager struct for the existing DB file
 */
-Pager* pager_open(const char* filename) {
+Pager* open_pager(const char* filename) {
 	int fd = open(filename,
 	/* read/write mode | create file if it does not exist */
 		O_RDWR | O_CREAT,
@@ -36,6 +36,13 @@ Pager* pager_open(const char* filename) {
 	Pager* pager = malloc(sizeof(Pager));
 	pager->file_descriptor = fd;
 	pager->file_length = file_length;
+	pager->num_pages = (file_length / PAGE_SIZE);
+
+	/* make sure the DB file is wholesome...lol */
+	if (file_length % PAGE_SIZE != 0) {
+		printf("The DB file is not a whole number of pages. Someone's been bribing this file because it is corrupt AF\n");
+		exit(EXIT_FAILURE);
+	}
 
 	/* initialize the page cache to all NULLs */	
 	for (uint32_t i = 0; i < TABLE_MAX_PAGES; i++) {
@@ -67,11 +74,6 @@ void* get_page(Pager* pager, uint32_t page_num) {
 		void* page = malloc(PAGE_SIZE);
 		uint32_t num_pages = pager->file_length / PAGE_SIZE;
 
-		/* save a partial page if necessary */
-		if (pager->file_length % PAGE_SIZE) {
-			num_pages += 1;
-		}
-
 		/* if possible, read the page into memory */
 		if (page_num <= num_pages) {
 			lseek(pager->file_descriptor, page_num * PAGE_SIZE, SEEK_SET);
@@ -84,6 +86,12 @@ void* get_page(Pager* pager, uint32_t page_num) {
 
 		/* adds the page to the pager cache */
 		pager->pages[page_num] = page;
+
+		/* we no longer have partial pages since each node gets 
+		one page, so we always increment when a new page is added */
+		if (page_num >= pager->num_pages) {
+			pager->num_pages = page_num + 1;
+		}
 	}
 
 	return pager->pages[page_num];
@@ -96,7 +104,7 @@ void* get_page(Pager* pager, uint32_t page_num) {
 	page_num: number of the desired page
 	size: page size
 */
-void pager_flush(Pager* pager, uint32_t page_num, uint32_t size) {
+void flush_pager(Pager* pager, uint32_t page_num) {
 	/* check if the page is populated */
 	if (pager->pages[page_num] == NULL) {
 		printf("Tried to flush null page\n");
@@ -111,7 +119,7 @@ void pager_flush(Pager* pager, uint32_t page_num, uint32_t size) {
 	}
 
 	/* try to write to the specified page */
-	ssize_t bytes_written = write(pager->file_descriptor, pager->pages[page_num], size);
+	ssize_t bytes_written = write(pager->file_descriptor, pager->pages[page_num], PAGE_SIZE);
 	if (bytes_written == -1) {
 		printf("Error writing: %d\n", errno);
 		exit(EXIT_FAILURE);
@@ -122,16 +130,22 @@ void pager_flush(Pager* pager, uint32_t page_num, uint32_t size) {
 	initializes and returns a Table struct 
 
 	filename: pointer to a string containing the DB filename
-	returns: pointer to a Table struct for the existing DB file
+	returns: pointer to a Table struct for the DB file
 */
 Table* open_database(const char* filename) {
 	/* initialize table pager, which keeps track of the pages;
 	it uses malloc(), so it will have to be freed later */
-	Pager* pager = pager_open(filename);
-	uint32_t num_rows = pager->file_length / ROW_SIZE;
+	Pager* pager = open_pager(filename);
 	Table* table = malloc(sizeof(Table));
 	table->pager = pager;
-	table->num_rows = num_rows;
+	table->root_page_num = 0;
+
+	/* if the DB file does not yet exist, create one */
+	if (pager->num_pages == 0) {
+		void* root_node = get_page(pager, 0);
+		initialize_leaf_node(root_node);
+	}
+
 	return table;
 }
 
@@ -142,28 +156,16 @@ Table* open_database(const char* filename) {
 */
 void close_database(Table* table) {
 	Pager* pager = table->pager;
-	uint32_t num_full_pages = table->num_rows / ROWS_PER_PAGE;
 
-	/* run through each cached page; if it's not empty,
-	save it to disk and free the page */
-	for (uint32_t i = 0; i < num_full_pages; i++) {
+	/* run through each cached page; if it's not empty, save it 
+	to disk and free the page */
+	for (uint32_t i = 0; i < pager->num_pages; i++) {
 		if (pager->pages[i] == NULL) {
 			continue;
 		}
-	    pager_flush(pager, i, PAGE_SIZE);
+	    flush_pager(pager, i);
 	    free(pager->pages[i]);
 	    pager->pages[i] = NULL;
-	}
-
-	/* save any leftover rows from a partial page */
-	uint32_t num_additional_rows = table->num_rows % ROWS_PER_PAGE;
-	if (num_additional_rows > 0) {
-		uint32_t page_num = num_full_pages;
-		if (pager->pages[page_num] != NULL) {
-		  pager_flush(pager, page_num, num_additional_rows * ROW_SIZE);
-		  free(pager->pages[page_num]);
-		  pager->pages[page_num] = NULL;
-		}
 	}
 
 	int result = close(pager->file_descriptor);
