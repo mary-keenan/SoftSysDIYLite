@@ -6,6 +6,10 @@
 
 
 describe 'database' do # this sets the prefix for the tests
+	before do
+		`rm -rf test.db`
+	end
+	
 	def run_script(commands) # each test calls this function
 		raw_output = nil
 		IO.popen("./diylite test.db", "r+") do |pipe| # it runs the executable
