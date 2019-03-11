@@ -1,5 +1,5 @@
 /* 
-
+ 
 This program implements a minimalistic SQLite database based on a 
 tutorial at https://cstack.github.io/db_tutorial/.
 
