@@ -134,17 +134,22 @@ ParsingResult check_statement(InputBuffer* input_buffer, Statement* statement) {
 	returns: status code signifying the success of execution
 */
 ExecuteResult execute_insert(Statement* statement, Table* table) {
-  if (table->num_rows >= TABLE_MAX_ROWS) {
-    return EXECUTE_TABLE_FULL;
-  }
+	if (table->num_rows >= TABLE_MAX_ROWS) {
+		return EXECUTE_TABLE_FULL;
+	}
 
-  /* make a copy of the address ??? */
-  Row* row_to_insert = &(statement->row_to_insert);
-  /* insert the new row into the given table*/
-  serialize_row(row_to_insert, row_slot(table, table->num_rows));
-  table->num_rows += 1;
+	/* create objects necessary to execute the insert statement */
+	Row* row_to_insert = &(statement->row_to_insert);
+	Cursor* cursor = get_table_end(table);
 
-  return EXECUTE_SUCCESS;
+	/* insert the new row into the given table*/
+	serialize_row(row_to_insert, get_cursor_value(cursor));
+	table->num_rows += 1;
+
+	/* free the Cursor object to prevent a memory leak */
+	free(cursor);
+
+	return EXECUTE_SUCCESS;
 }
 
 /* 
@@ -155,13 +160,22 @@ ExecuteResult execute_insert(Statement* statement, Table* table) {
 	returns: status code signifying the success of execution
 */
 ExecuteResult execute_select(Statement* statement, Table* table) {
-  Row row;
+  
+	/* create objects necessary to execute the select statement */
+	Row row;
+	Cursor* cursor = get_table_end(table);
+  
   /* it "selects" every single row */
-  for (uint32_t i = 0; i < table->num_rows; i++) {
-    deserialize_row(row_slot(table, i), &row);
-    print_row(&row);
-  }
-  return EXECUTE_SUCCESS;
+	while (!(cursor->end_of_table)) {
+		deserialize_row(get_cursor_value(cursor), &row);
+		print_row(&row);
+		get_cursor_advance(cursor);
+	}
+
+	/* free the Cursor object to prevent a memory leak */
+	free(cursor);
+
+	return EXECUTE_SUCCESS;
 }
 
 /* 
@@ -202,21 +216,6 @@ void deserialize_row(void* source, Row* destination) {
 	memcpy(&(destination->id), source + ID_OFFSET, ID_SIZE);
 	memcpy(&(destination->username), source + USERNAME_OFFSET, USERNAME_SIZE);
 	memcpy(&(destination->email), source + EMAIL_OFFSET, EMAIL_SIZE);
-}
-
-/* 
-	finds the memory location of the [row_num] row in the table
-
-	table: pointer to a table
-	row_num: row number to retrieve
-	returns: pointer to the location of the desired row
-*/
-void* row_slot(Table* table, uint32_t row_num) {
-	uint32_t page_num = row_num / ROWS_PER_PAGE;
-	void* page = get_page(table->pager, page_num);
-	uint32_t row_offset = row_num % ROWS_PER_PAGE;
-	uint32_t byte_offset = row_offset * ROW_SIZE;
-	return page + byte_offset;
 }
 
 /* prints the columns in the given row */

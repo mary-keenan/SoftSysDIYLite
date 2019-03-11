@@ -98,6 +98,13 @@ typedef struct {
   uint32_t num_rows;
 } Table;
 
+/* represents a location within the table */
+typedef struct {
+  Table* table;
+  uint32_t row_num;
+  bool end_of_table;
+} Cursor;
+
 /* function declarations */
 InputBuffer* new_input_buffer();
 void print_prompt();
@@ -111,7 +118,6 @@ ExecuteResult execute_select(Statement* statement, Table* table);
 ExecuteResult execute_statement(Statement* statement, Table* table);
 void serialize_row(Row* source, void* destination);
 void deserialize_row(void* source, Row* destination);
-void* row_slot(Table* table, uint32_t row_num);
 void print_row(Row* row);
 
 
@@ -121,3 +127,9 @@ void* get_page(Pager* pager, uint32_t page_num);
 void pager_flush(Pager* pager, uint32_t page_num, uint32_t size);
 Table* open_database();
 void close_database(Table* table);
+
+/* Cursor function declarations */
+Cursor* get_table_start(Table* table);
+Cursor* get_table_end(Table* table);
+void* get_cursor_value(Cursor* cursor);
+void get_cursor_advance(Cursor* cursor);
