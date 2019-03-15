@@ -64,9 +64,22 @@ void* get_leaf_value(void* node, uint32_t cell_num) {
 	return get_leaf_cell(node, cell_num) + LEAF_NODE_KEY_SIZE;
 }
 
-/* sets the number of cells in the leaf node to 0 -- this is both 
-a getter and a setter */
+/* returns a NodeType enum value for the given node */
+NodeType get_node_type(void* node) {
+	uint8_t value = *((uint8_t*)(node + NODE_TYPE_OFFSET));
+	return (NodeType)value;
+}
+
+/* sets the NodeType field in the node */
+void set_node_type(void* node, NodeType type) {
+	uint8_t value = type;
+	*((uint8_t*)(node + NODE_TYPE_OFFSET)) = value;
+}
+
+/* sets the number of cells in the leaf node to 0 and sets the 
+node type -- this is both a getter and a setter */
 void initialize_leaf_node(void* node) { 
+	set_node_type(node, NODE_LEAF);
 	*get_leaf_num_cells(node) = 0; 
 }
 
@@ -77,7 +90,7 @@ void initialize_leaf_node(void* node) {
 	key: key to insert in key cell
 	value: value to insert in value cell
 */
-void leaf_insert(Cursor* cursor, uint32_t key, Row* value) {
+void insert_cell_in_leaf(Cursor* cursor, uint32_t key, Row* value) {
 	
 	void* node = get_page(cursor->table->pager, cursor->page_num);
 	uint32_t num_cells = *get_leaf_num_cells(node);
@@ -103,6 +116,49 @@ void leaf_insert(Cursor* cursor, uint32_t key, Row* value) {
 	*(get_leaf_num_cells(node)) += 1;
 	*(get_leaf_key(node, cursor->cell_num)) = key;
 	serialize_row(value, get_leaf_value(node, cursor->cell_num));
+}
+
+/* 
+	finds the position of the key within a node using binary search
+	
+	table: pointer to a Table struct for a given DB file
+	page_num: number of the node that contains the key
+	key: int that maps to some value
+	returns: pointer to a Cursor that points to the key's location
+*/
+Cursor* find_key_in_leaf(Table* table, uint32_t page_num, uint32_t key) {
+	void* node = get_page(table->pager, page_num);
+	uint32_t num_cells = *get_leaf_num_cells(node);
+
+	/* initialize the cursor that will point to the key's location */
+	Cursor* cursor = malloc(sizeof(Cursor));
+	cursor->table = table;
+	cursor->page_num = page_num;
+
+	/* binary search leaf node for key value */
+	uint32_t min_index = 0;
+	uint32_t one_past_max_index = num_cells;
+	while (one_past_max_index != min_index) {
+		uint32_t index = (min_index + one_past_max_index) / 2;
+		uint32_t key_at_index = *get_leaf_key(node, index);
+		
+		/* if we've found the right key, we can stop searching */
+		if (key == key_at_index) {
+			cursor->cell_num = index;
+			return cursor;
+		}
+
+		/* otherwise we update where we're looking (left or right 
+		of the current index) */
+		if (key < key_at_index) {
+			one_past_max_index = index;
+		} else {
+			min_index = index + 1;
+		}
+	}
+
+	cursor->cell_num = min_index;
+	return cursor;
 }
 
 /* prints the constants currently being used */

@@ -92,7 +92,8 @@ typedef enum {
 /* status code for the execution of a statement */
 typedef enum { 
 	EXECUTE_SUCCESS, 
-	EXECUTE_TABLE_FULL 
+	EXECUTE_TABLE_FULL,
+	EXECUTE_DUPLICATE_KEY
 } ExecuteResult;
 
 /* commands that the SQL compiler understands */
@@ -140,7 +141,7 @@ typedef struct {
 /* helps us keep track of node type */
 typedef enum { 
 	NODE_INTERNAL,
-	NODE_LEAF 
+	NODE_LEAF
 } NodeType;
 
 
@@ -169,7 +170,7 @@ void close_database(Table* table);
 
 /* Cursor function declarations */
 Cursor* get_table_start(Table* table);
-Cursor* get_table_end(Table* table);
+Cursor* find_key_in_table(Table* table, uint32_t key);
 void* get_cursor_value(Cursor* cursor);
 void advance_cursor(Cursor* cursor);
 
@@ -178,7 +179,10 @@ uint32_t* get_leaf_num_cells(void* node);
 void* get_leaf_cell(void* node, uint32_t cell_num);
 uint32_t* get_leaf_key(void* node, uint32_t cell_num) ;
 void* get_leaf_value(void* node, uint32_t cell_num);
+NodeType get_node_type(void* node);
+void set_node_type(void* node, NodeType type);
 void initialize_leaf_node(void* node);
-void leaf_insert(Cursor* cursor, uint32_t key, Row* value);
+Cursor* find_key_in_leaf(Table* table, uint32_t page_num, uint32_t key);
+void insert_cell_in_leaf(Cursor* cursor, uint32_t key, Row* value);
 void print_constants();
 void print_leaf(void* node);

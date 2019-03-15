@@ -31,23 +31,24 @@ Cursor* get_table_start(Table* table) {
 }
 
 /* 
-	creates a Cursor for the last position in a specified Table
+	creates a Cursor for the position of the given key
 
 	table: pointer to a Table struct for a given DB file
-	returns: pointer to a Cursor struct for the given Table
+	key: int that maps to some value
+	returns: pointer to a Cursor struct for the given Table that
+		points to the key's location
 */
-Cursor* get_table_end(Table* table) {
-	Cursor* cursor = malloc(sizeof(Cursor));
-	cursor->table = table;
-	cursor->page_num = table->root_page_num;
-	cursor->end_of_table = true;
+Cursor* find_key_in_table(Table* table, uint32_t key) {
+	uint32_t root_page_num = table->root_page_num;
+	void* root_node = get_page(table->pager, root_page_num);
 
-	/* initialize the end cursor to point at the root node */
-	void* root_node = get_page(table->pager, table->root_page_num);
-	uint32_t num_cells = *get_leaf_num_cells(root_node);
-	cursor->cell_num = num_cells;
-
-	return cursor;
+	/* determine if we need to search for the relevant leaf node */
+	if (get_node_type(root_node) == NODE_LEAF) {
+		return find_key_in_leaf(table, root_page_num, key);
+	} else {
+		printf("theoretically searching an internal node\n");
+		exit(EXIT_FAILURE);
+	}
 }
 
 /* 

@@ -147,10 +147,29 @@ describe 'database' do # this sets the prefix for the tests
 			"db > Executed!",
 			"db > Tree:",
 			"leaf (size 3)",
-			"  - 0 : 3",
-			"  - 1 : 1",
-			"  - 2 : 2",
+			"  - 0 : 1",
+			"  - 1 : 2",
+			"  - 2 : 3",
 			"db > "
+	])
+	end
+
+	it 'prints an error message if there is a duplicate id' do
+		script = [
+		  "insert 1 user1 person1@example.com",
+		  "insert 1 user1 person1@example.com",
+		  "select",
+		  "mk_exit",
+		]
+
+		result = run_script(script)
+
+		expect(result).to match_array([
+		  "db > Executed!",
+		  "db > Error: I don't like seconds",
+		  "db > (1, user1, person1@example.com)",
+		  "Executed!",
+		  "db > "
 	])
 	end
 

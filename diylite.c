@@ -143,17 +143,32 @@ ParsingResult check_statement(InputBuffer* input_buffer, Statement* statement) {
 */
 ExecuteResult execute_insert(Statement* statement, Table* table) {
 	void* node = get_page(table->pager, table->root_page_num);
-	
+	/* we only want to call this func once and we use the result
+	twice, so we want to assign it to a variable here */
+	uint32_t num_cells = (*get_leaf_num_cells(node));
+
 	/* check if the node is full */
-	if ((*get_leaf_num_cells(node) >= LEAF_NODE_MAX_CELLS)) {		return EXECUTE_TABLE_FULL;
+	if (num_cells >= LEAF_NODE_MAX_CELLS) {
+		return EXECUTE_TABLE_FULL;
 	}
 
 	/* create objects necessary to execute the insert statement */
 	Row* row_to_insert = &(statement->row_to_insert);
-	Cursor* cursor = get_table_end(table);
+	uint32_t key_to_insert = row_to_insert->id;
+	Cursor* cursor = find_key_in_table(table, key_to_insert);
+
+	/* check if the insert location is before existing cells */
+	if (cursor->cell_num < num_cells) {
+		/* if the key at the insert location is the same key
+		that's being inserted, we throw an error*/
+		uint32_t key_at_index = *get_leaf_key(node, cursor->cell_num);
+		if (key_at_index == key_to_insert) {
+			return EXECUTE_DUPLICATE_KEY;
+		}
+	}
 
 	/* insert the new cell into the given node */
-	leaf_insert(cursor, row_to_insert->id, row_to_insert);
+	insert_cell_in_leaf(cursor, row_to_insert->id, row_to_insert);
 
 	/* free the Cursor object to prevent a memory leak */
 	free(cursor);
@@ -291,6 +306,9 @@ int main(int argc, char* argv[]) {
 				break;
 			case (EXECUTE_TABLE_FULL):
 				printf("Error: the table ate too much for dinner\n");
+				break;
+			case (EXECUTE_DUPLICATE_KEY):
+				printf("Error: I don't like seconds\n");
 				break;
     	}
 	}
