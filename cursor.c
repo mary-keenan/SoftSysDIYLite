@@ -51,15 +51,12 @@ Cursor* find_key_in_table(Table* table, uint32_t key) {
 	recursively searches for the node with the given key by
 	moving down the table (parent to child)
 
-	table: pointer to a Table struct for a given DB file
-	page_num: int that maps to the node we're currently looking at
+	node: pointer to the node to search
 	key: int that maps to some value
 
-	returns: pointer to a Cursor struct for the given Table that
-		points to the key's location
+	returns: position of the child node with the given key
 */
-Cursor* find_internal_node(Table* table, uint32_t page_num, uint32_t key) {
-	void* node = get_page(table->pager, page_num);
+uint32_t find_internal_node_child(void* node, uint32_t key) {
 	uint32_t num_keys = *get_internal_node_num_keys(node);
 
 	uint32_t min_index = 0;
@@ -79,9 +76,28 @@ Cursor* find_internal_node(Table* table, uint32_t page_num, uint32_t key) {
 		}
 	}
 
+	return min_index;
+}
+
+
+/* 
+	finds the internal node with the given key 
+
+	table: pointer to a Table struct for a given DB file
+	page_num: int that maps to the node we're currently looking at
+	key: int that maps to some value
+
+	returns: pointer to a Cursor struct for the given Table that
+		points to the key's location
+*/
+Cursor* find_internal_node(Table* table, uint32_t page_num, uint32_t key) {
+	void* node = get_page(table->pager, page_num);
+
 	/* get the child we want to search, then search it*/
-	uint32_t child_num = *get_internal_node_child(node, min_index);
+	uint32_t child_index = find_internal_node_child(node, key);
+	uint32_t child_num = find_internal_node_child(node, child_index);
 	void* child = get_page(table->pager, child_num);
+	
 	switch (get_node_type(child)) {
 		case NODE_LEAF:
 			return find_key_in_leaf(table, child_num, key);

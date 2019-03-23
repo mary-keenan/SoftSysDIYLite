@@ -87,6 +87,7 @@ https://cstack.github.io/db_tutorial/assets/images/internal-node-format.png
 #define INTERNAL_NODE_KEY_SIZE sizeof(uint32_t)
 #define INTERNAL_NODE_CHILD_SIZE sizeof(uint32_t)
 #define INTERNAL_NODE_CELL_SIZE (INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE)
+#define INTERNAL_NODE_MAX_CELLS 3 /* kept small for testing */
 
 /* wrapper needed to store the result of getline() */
 typedef struct InputBuffer_t {
@@ -193,6 +194,7 @@ uint32_t get_unused_page_num(Pager* pager);
 /* Cursor function declarations */
 Cursor* get_table_start(Table* table);
 Cursor* find_key_in_table(Table* table, uint32_t key);
+uint32_t find_internal_node_child(void* node, uint32_t key);
 Cursor* find_internal_node(Table* table, uint32_t page_num, uint32_t key);
 void* get_cursor_value(Cursor* cursor);
 void advance_cursor(Cursor* cursor);
@@ -201,6 +203,7 @@ void advance_cursor(Cursor* cursor);
 void set_node_type(void* node, NodeType type);
 NodeType get_node_type(void* node);
 void initialize_leaf_node(void* node);
+uint32_t* get_node_parent(void* node);
 uint32_t* get_leaf_num_cells(void* node);
 void* get_leaf_cell(void* node, uint32_t cell_num);
 uint32_t* get_leaf_key(void* node, uint32_t cell_num) ;
@@ -214,6 +217,8 @@ uint32_t* get_internal_node_right_child(void* node);
 uint32_t* get_internal_node_cell(void* node, uint32_t cell_num);
 uint32_t* get_internal_node_child(void* node, uint32_t child_num);
 uint32_t* get_internal_node_key(void* node, uint32_t key_num);
+void update_internal_node_key(void* node, uint32_t old_key, uint32_t new_key);
+void insert_child_into_internal_node(Table* table, uint32_t parent_page_num, uint32_t child_page_num);
 void set_node_root(void* node, bool is_root);
 bool is_node_root(void* node);
 void create_new_root(Table* table, uint32_t right_child_page_num);
