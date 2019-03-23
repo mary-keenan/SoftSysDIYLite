@@ -62,7 +62,7 @@ Pager* open_pager(const char* filename) {
 void* get_page(Pager* pager, uint32_t page_num) {
 	/* make sure the page is gettable before proceeding */
 	if (page_num > TABLE_MAX_PAGES) {
-		printf("Page # %d is out of order! Or rather, bounds...\n", 
+		printf("Page #%d is out of order! Or rather, bounds...\n", 
 			page_num);
 		exit(EXIT_FAILURE);
 	}
@@ -107,7 +107,7 @@ void* get_page(Pager* pager, uint32_t page_num) {
 void flush_pager(Pager* pager, uint32_t page_num) {
 	/* check if the page is populated */
 	if (pager->pages[page_num] == NULL) {
-		printf("Tried to flush null page\n");
+		printf("Tried to flush a null page\n");
 		exit(EXIT_FAILURE);
 	}
 

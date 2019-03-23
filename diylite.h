@@ -191,6 +191,7 @@ uint32_t get_unused_page_num(Pager* pager);
 /* Cursor function declarations */
 Cursor* get_table_start(Table* table);
 Cursor* find_key_in_table(Table* table, uint32_t key);
+Cursor* find_internal_node(Table* table, uint32_t page_num, uint32_t key);
 void* get_cursor_value(Cursor* cursor);
 void advance_cursor(Cursor* cursor);
 

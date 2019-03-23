@@ -15,7 +15,11 @@ describe 'database' do # this sets the prefix for the tests
 		IO.popen("./diylite test.db", "r+") do |pipe| # it runs the executable
 			commands.each do |command|
 				# it feeds commands to the script's fake command line (db >)
-				pipe.puts command
+				begin
+					pipe.puts command
+				rescue Errno::EPIPE
+					break
+				end
 			end
 
 			pipe.close_write
@@ -44,7 +48,10 @@ describe 'database' do # this sets the prefix for the tests
 		end
 		script << "mk_exit"
 		result = run_script(script)
-		expect(result[-2]).to eq('db > Error: the table ate too much for dinner')
+		expect(result.last(2)).to match_array([
+			"db > Executed!",
+			"db > theoretically updating parent after split",
+		])	
 	end
 
 	it 'allows inserting strings that are the maximum length' do
@@ -205,7 +212,8 @@ describe 'database' do # this sets the prefix for the tests
 			"        12",
 			"        13",
 			"        14",
-			"db > theoretically searching an internal node",
+			"db > Executed!",
+			"db > ",
 	])
 	end
 
