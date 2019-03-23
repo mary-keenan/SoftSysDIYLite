@@ -52,12 +52,13 @@ NodeType get_node_type(void* node) {
 	return (NodeType)value;
 }
 
-/* sets the number of cells in the leaf node to 0 and sets the 
-node type */
+/* sets the node type, number of cells in the leaf node to 0, and 
+the next leaf cell to 0, which represents a leaf with no siblings */
 void initialize_leaf_node(void* node) { 
 	set_node_type(node, NODE_LEAF);
 	set_node_root(node, false);
-	*get_leaf_num_cells(node) = 0; 
+	*get_leaf_num_cells(node) = 0;
+	*get_next_leaf_of_given_leaf(node) = 0;
 }
 
 /* returns a pointer to the field in the node w/ the number of 
@@ -82,6 +83,12 @@ uint32_t* get_leaf_key(void* node, uint32_t cell_num) {
 leaf node  -- this is both a getter and a setter */
 void* get_leaf_value(void* node, uint32_t cell_num) {
 	return get_leaf_cell(node, cell_num) + LEAF_NODE_KEY_SIZE;
+}
+
+/* returns a pointer to the position of the leaf to the right
+of the given leaf */
+uint32_t* get_next_leaf_of_given_leaf(void* node) {
+	return node + LEAF_NODE_NEXT_LEAF_OFFSET;
 }
 
 /* 
@@ -119,7 +126,7 @@ void insert_cell_in_leaf(Cursor* cursor, uint32_t key, Row* value) {
 	serialize_row(value, get_leaf_value(node, cursor->cell_num));
 }
 
-/* 
+/*
 	finds the position of the key within a node using binary search
 	
 	table: pointer to a Table struct for a given DB file
@@ -169,16 +176,20 @@ Cursor* find_key_in_leaf(Table* table, uint32_t page_num, uint32_t key) {
 	cursor: pointer to the correct node
 	key: key to insert
 	value: value to insert
+
 	returns: pointer to a Cursor that points to the key's location
 */
 void split_leaf_and_insert(Cursor* cursor, uint32_t key, Row* value) {
- 
+  	void* destination_node;
+
 	/* get the old leaf node and initialize the new leaf node*/
 	void* old_node = get_page(cursor->table->pager, cursor->page_num);
 	uint32_t new_page_num = get_unused_page_num(cursor->table->pager);
 	void* new_node = get_page(cursor->table->pager, new_page_num);
 	initialize_leaf_node(new_node);
-	void* destination_node;
+	/* the old leaf's sibling becomes the new leaf's sibling */
+	*get_next_leaf_of_given_leaf(new_node) = *get_next_leaf_of_given_leaf(old_node);
+	*get_next_leaf_of_given_leaf(old_node) = new_page_num;
 
 	/* determine which cells should stay in the old leaf node 
 	(half) and which cells should be moved to the new leaf node */
@@ -194,7 +205,8 @@ void split_leaf_and_insert(Cursor* cursor, uint32_t key, Row* value) {
 
 		/* move the cell to the appropriate leaf node */
 		if (i == cursor->cell_num) {
-			serialize_row(value, destination);
+			serialize_row(value, get_leaf_value(destination_node, index_within_node));
+			*get_leaf_key(destination_node, index_within_node) = key;
 		} else if (i > cursor->cell_num) {
 			memcpy(destination, get_leaf_cell(old_node, i - 1), LEAF_NODE_CELL_SIZE);
 		} else {

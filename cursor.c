@@ -11,20 +11,16 @@ at Olin College of Engineering.
 #include "diylite.h"
 
 /* 
-	creates a Cursor for the first position in a specified Table
+	creates a Cursor for the position of the lowest ID in a 
+	specified Table
 
 	table: pointer to a Table struct for a given DB file
 	returns: pointer to a Cursor struct for the given Table
 */
 Cursor* get_table_start(Table* table) {
-	Cursor* cursor = malloc(sizeof(Cursor));
-	cursor->table = table;
-	cursor->page_num = table->root_page_num;
-	cursor->cell_num = 0;
-
-	/* initialize the start cursor to point at the root node */
-	void* root_node = get_page(table->pager, table->root_page_num);
-	uint32_t num_cells = *get_leaf_num_cells(root_node);
+	Cursor* cursor = find_key_in_table(table, 0);
+	void* node = get_page(table->pager, cursor->page_num);
+	uint32_t num_cells = *get_leaf_num_cells(node);
 	cursor->end_of_table = (num_cells == 0);
 
 	return cursor;
@@ -107,7 +103,9 @@ void* get_cursor_value(Cursor* cursor) {
 }
 
 /* 
-	increment the cell number of the given Cursor by one
+	increments the cell number of the given Cursor by one or
+	points to the next node if there are no more cells in the
+	current node/page
 
 	cursor: pointer to a Cursor struct for the current Table
 */
@@ -118,6 +116,17 @@ void advance_cursor(Cursor* cursor) {
 
 	/* check to see if the cell_num is out of the table (too high) */
 	if (cursor->cell_num >= (*get_leaf_num_cells(node))) {
-		cursor->end_of_table = true;
+		/* find the current leaf's sibling (leaf to the right)  */
+		uint32_t next_page_num = *get_next_leaf_of_given_leaf(node);
+		/* if there are no more sibling leafs, this is the leaf
+		farthest to the right (and therefore, the end of the 
+		table) */
+		if (next_page_num == 0) {
+			cursor->end_of_table = true;
+		} else {
+			/* point the cursor at the current leaf's sibling */
+			cursor->page_num = next_page_num;
+			cursor->cell_num = 0;
+		}
 	}
 }

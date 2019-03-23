@@ -48,7 +48,9 @@ at Olin College of Engineering.
 /* leaf node headers */
 #define LEAF_NODE_NUM_CELLS_SIZE sizeof(uint32_t)
 #define LEAF_NODE_NUM_CELLS_OFFSET COMMON_NODE_HEADER_SIZE
-#define LEAF_NODE_HEADER_SIZE (COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE)
+#define LEAF_NODE_NEXT_LEAF_SIZE sizeof(uint32_t)
+#define LEAF_NODE_NEXT_LEAF_OFFSET (LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE)
+#define LEAF_NODE_HEADER_SIZE (COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE)
 
 /* leaf node body -- currently, 12 values can be stored in
 one leaf node with a bit of leftover (wasted) space at the end,
@@ -204,6 +206,7 @@ void* get_leaf_cell(void* node, uint32_t cell_num);
 uint32_t* get_leaf_key(void* node, uint32_t cell_num) ;
 void* get_leaf_value(void* node, uint32_t cell_num);
 Cursor* find_key_in_leaf(Table* table, uint32_t page_num, uint32_t key);
+uint32_t* get_next_leaf_of_given_leaf(void* node);
 void insert_cell_in_leaf(Cursor* cursor, uint32_t key, Row* value);
 void split_leaf_and_insert(Cursor* cursor, uint32_t key, Row* value);
 uint32_t* get_internal_node_num_keys(void* node);
