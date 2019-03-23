@@ -65,7 +65,7 @@ MetaCommandResult implement_command(InputBuffer* input_buffer, Table* table) {
 		exit(EXIT_SUCCESS);
 	} else if (strcmp(input_buffer->buffer, "mk_btree") == 0) {
 		printf("Tree:\n");
-		print_leaf(get_page(table->pager, 0));
+		print_tree(table->pager, 0, 0);
 		return META_COMMAND_SUCCESS;
 	} else if (strcmp(input_buffer->buffer, "mk_constants") == 0) {
 	    printf("Constants:\n");
@@ -143,14 +143,6 @@ ParsingResult check_statement(InputBuffer* input_buffer, Statement* statement) {
 */
 ExecuteResult execute_insert(Statement* statement, Table* table) {
 	void* node = get_page(table->pager, table->root_page_num);
-	/* we only want to call this func once and we use the result
-	twice, so we want to assign it to a variable here */
-	uint32_t num_cells = (*get_leaf_num_cells(node));
-
-	/* check if the node is full */
-	if (num_cells >= LEAF_NODE_MAX_CELLS) {
-		return EXECUTE_TABLE_FULL;
-	}
 
 	/* create objects necessary to execute the insert statement */
 	Row* row_to_insert = &(statement->row_to_insert);
@@ -158,7 +150,7 @@ ExecuteResult execute_insert(Statement* statement, Table* table) {
 	Cursor* cursor = find_key_in_table(table, key_to_insert);
 
 	/* check if the insert location is before existing cells */
-	if (cursor->cell_num < num_cells) {
+	if (cursor->cell_num < (*get_leaf_num_cells(node))) {
 		/* if the key at the insert location is the same key
 		that's being inserted, we throw an error*/
 		uint32_t key_at_index = *get_leaf_key(node, cursor->cell_num);

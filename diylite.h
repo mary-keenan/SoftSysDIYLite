@@ -65,7 +65,26 @@ https://cstack.github.io/db_tutorial/assets/images/leaf-node-format.png
 #define LEAF_NODE_CELL_SIZE (LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE)
 #define LEAF_NODE_SPACE_FOR_CELLS (PAGE_SIZE - LEAF_NODE_HEADER_SIZE)
 #define LEAF_NODE_MAX_CELLS (LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE)
+#define LEAF_NODE_RIGHT_SPLIT_COUNT ((LEAF_NODE_MAX_CELLS + 1) / 2)
+#define LEAF_NODE_LEFT_SPLIT_COUNT ((LEAF_NODE_MAX_CELLS + 1) - LEAF_NODE_RIGHT_SPLIT_COUNT)
 
+/* internal node headers -- currently, it can fit 510 keys and 
+511 child pointers
+
+refer to this image to get a visualization of the space allocation
+in each node:
+https://cstack.github.io/db_tutorial/assets/images/internal-node-format.png 
+*/
+#define INTERNAL_NODE_NUM_KEYS_SIZE (sizeof(uint32_t))
+#define INTERNAL_NODE_NUM_KEYS_OFFSET COMMON_NODE_HEADER_SIZE
+#define INTERNAL_NODE_RIGHT_CHILD_SIZE sizeof(uint32_t)
+#define INTERNAL_NODE_RIGHT_CHILD_OFFSET (INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_NUM_KEYS_SIZE)
+#define INTERNAL_NODE_HEADER_SIZE (COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_KEYS_SIZE + INTERNAL_NODE_RIGHT_CHILD_SIZE)
+
+/* internal node body values */
+#define INTERNAL_NODE_KEY_SIZE sizeof(uint32_t)
+#define INTERNAL_NODE_CHILD_SIZE sizeof(uint32_t)
+#define INTERNAL_NODE_CELL_SIZE (INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE)
 
 /* wrapper needed to store the result of getline() */
 typedef struct InputBuffer_t {
@@ -145,7 +164,7 @@ typedef enum {
 } NodeType;
 
 
-/* function declarations */
+/* diylite function declarations */
 InputBuffer* new_input_buffer();
 void print_prompt();
 void read_input(InputBuffer* input_buffer);
@@ -167,6 +186,7 @@ void* get_page(Pager* pager, uint32_t page_num);
 void flush_pager(Pager* pager, uint32_t page_num);
 Table* open_database();
 void close_database(Table* table);
+uint32_t get_unused_page_num(Pager* pager);
 
 /* Cursor function declarations */
 Cursor* get_table_start(Table* table);
@@ -175,14 +195,25 @@ void* get_cursor_value(Cursor* cursor);
 void advance_cursor(Cursor* cursor);
 
 /* B-Tree function declarations*/
+void set_node_type(void* node, NodeType type);
+NodeType get_node_type(void* node);
+void initialize_leaf_node(void* node);
 uint32_t* get_leaf_num_cells(void* node);
 void* get_leaf_cell(void* node, uint32_t cell_num);
 uint32_t* get_leaf_key(void* node, uint32_t cell_num) ;
 void* get_leaf_value(void* node, uint32_t cell_num);
-NodeType get_node_type(void* node);
-void set_node_type(void* node, NodeType type);
-void initialize_leaf_node(void* node);
 Cursor* find_key_in_leaf(Table* table, uint32_t page_num, uint32_t key);
 void insert_cell_in_leaf(Cursor* cursor, uint32_t key, Row* value);
+void split_leaf_and_insert(Cursor* cursor, uint32_t key, Row* value);
+uint32_t* get_internal_node_num_keys(void* node);
+uint32_t* get_internal_node_right_child(void* node);
+uint32_t* get_internal_node_cell(void* node, uint32_t cell_num);
+uint32_t* get_internal_node_child(void* node, uint32_t child_num);
+uint32_t* get_internal_node_key(void* node, uint32_t key_num);
+void set_node_root(void* node, bool is_root);
+bool is_node_root(void* node);
+void create_new_root(Table* table, uint32_t right_child_page_num);
+uint32_t get_max_key_in_node(void* node);
 void print_constants();
-void print_leaf(void* node);
+void indent(uint32_t level);
+void print_tree(Pager* pager, uint32_t page_num, uint32_t indentation_level);

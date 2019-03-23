@@ -144,6 +144,8 @@ Table* open_database(const char* filename) {
 	if (pager->num_pages == 0) {
 		void* root_node = get_page(pager, 0);
 		initialize_leaf_node(root_node);
+		/* the first node in the table will be the root node */
+		set_node_root(root_node, true); 
 	}
 
 	return table;
@@ -184,6 +186,11 @@ void close_database(Table* table) {
 	}
 
 	free(pager);
+}
+
+/* returns the number of the first unused page in the pager */
+uint32_t get_unused_page_num(Pager* pager) { 
+	return pager->num_pages; 
 }
 
 
