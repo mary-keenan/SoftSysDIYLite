@@ -95,7 +95,7 @@ Cursor* find_internal_node(Table* table, uint32_t page_num, uint32_t key) {
 
 	/* get the child we want to search, then search it*/
 	uint32_t child_index = find_internal_node_child(node, key);
-	uint32_t child_num = find_internal_node_child(node, child_index);
+	uint32_t child_num = *get_internal_node_child(node, child_index);
 	void* child = get_page(table->pager, child_num);
 	
 	switch (get_node_type(child)) {
