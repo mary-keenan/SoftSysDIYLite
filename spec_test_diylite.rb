@@ -50,7 +50,7 @@ describe 'database' do # this sets the prefix for the tests
 		result = run_script(script)
 		expect(result.last(2)).to match_array([
 			"db > Executed!",
-			"db > theoretically splitting the internal node",
+			"db > ",
 		])	
 	end
 

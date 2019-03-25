@@ -90,47 +90,6 @@ void* get_leaf_value(void* node, uint32_t cell_num) {
 	return get_leaf_cell(node, cell_num) + LEAF_NODE_KEY_SIZE;
 }
 
-/* returns a pointer to the position of the leaf to the right
-of the given leaf */
-uint32_t* get_next_leaf_of_given_leaf(void* node) {
-	return node + LEAF_NODE_NEXT_LEAF_OFFSET;
-}
-
-/* 
-	inserts key/value pair into a specified leaf node
-
-	cursor: pointer to Cursor struct specifying insert location
-	key: key to insert in key cell
-	value: value to insert in value cell
-*/
-void insert_cell_in_leaf(Cursor* cursor, uint32_t key, Row* value) {
-	
-	void* node = get_page(cursor->table->pager, cursor->page_num);
-	uint32_t num_cells = *get_leaf_num_cells(node);
-
-	/* check if the node is full (12 cells) before trying to insert 
-	-- this is already checked in execute_insert(), so it's a bit 
-	redundant, but I guess we should err on the side of caution */	
-	if (num_cells >= LEAF_NODE_MAX_CELLS) {
-	    split_leaf_and_insert(cursor, key, value);
-	    return;
-	}
-
-	/* make room for the new cell if necessary by moving existing cells 
-	to the right until we get to the cell we want to insert to */
-	if (cursor->cell_num < num_cells) {
-		for (uint32_t i = num_cells; i > cursor->cell_num; i--) {
-			memcpy(get_leaf_cell(node, i), get_leaf_cell(node, i - 1),
-			LEAF_NODE_CELL_SIZE);
-		}
-	}
-
-	/* insert the key/value pair */
-	*(get_leaf_num_cells(node)) += 1;
-	*(get_leaf_key(node, cursor->cell_num)) = key;
-	serialize_row(value, get_leaf_value(node, cursor->cell_num));
-}
-
 /*
 	finds the position of the key within a node using binary search
 	
@@ -174,6 +133,48 @@ Cursor* find_key_in_leaf(Table* table, uint32_t page_num, uint32_t key) {
 	return cursor;
 }
 
+/* returns a pointer to the position of the leaf to the right
+of the given leaf */
+uint32_t* get_next_leaf_of_given_leaf(void* node) {
+	return node + LEAF_NODE_NEXT_LEAF_OFFSET;
+}
+
+/* 
+	inserts key/value pair into a specified leaf node
+
+	cursor: pointer to Cursor struct specifying insert location
+	key: key to insert in key cell
+	value: value to insert in value cell
+*/
+void insert_cell_in_leaf(Cursor* cursor, uint32_t key, Row* value) {
+	
+	void* node = get_page(cursor->table->pager, cursor->page_num);
+	uint32_t num_cells = *get_leaf_num_cells(node);
+
+	/* check if the node is full (12 cells) before trying to insert 
+	-- this is already checked in execute_insert(), so it's a bit 
+	redundant, but I guess we should err on the side of caution */	
+	if (num_cells >= LEAF_NODE_MAX_CELLS) {
+	    split_leaf_and_insert(cursor, key, value);
+	    return;
+	}
+
+	/* make room for the new cell if necessary by moving existing 
+	cells to the right until we get to the cell we want to insert
+	to */
+	if (cursor->cell_num < num_cells) {
+		for (uint32_t i = num_cells; i > cursor->cell_num; i--) {
+			memcpy(get_leaf_cell(node, i), get_leaf_cell(node, i - 1),
+			LEAF_NODE_CELL_SIZE);
+		}
+	}
+
+	/* insert the key/value pair */
+	*(get_leaf_num_cells(node)) += 1;
+	*(get_leaf_key(node, cursor->cell_num)) = key;
+	serialize_row(value, get_leaf_value(node, cursor->cell_num));
+}
+
 /* 
 	splits a leaf node into two leaf nodes and inserts the new 
 	value into the appropriate node
@@ -181,8 +182,6 @@ Cursor* find_key_in_leaf(Table* table, uint32_t page_num, uint32_t key) {
 	cursor: pointer to the correct node
 	key: key to insert
 	value: value to insert
-
-	returns: pointer to a Cursor that points to the key's location
 */
 void split_leaf_and_insert(Cursor* cursor, uint32_t key, Row* value) {
   	void* destination_node;
@@ -316,8 +315,8 @@ void insert_child_into_internal_node(Table* table, uint32_t parent_page_num, uin
 
 	/* if the internal node is at max capacity, split it */
 	if (original_num_keys >= INTERNAL_NODE_MAX_CELLS) {
-		printf("theoretically splitting the internal node\n");
-		exit(EXIT_FAILURE);
+		split_internal_node_and_insert_child(table, parent_page_num, child_page_num);
+		return;
 	}
 
 	/* get the right child so we can compare its key to the 
@@ -350,6 +349,68 @@ void insert_child_into_internal_node(Table* table, uint32_t parent_page_num, uin
 	}
 }
 
+/* 
+	splits an internal node into two internal nodes and inserts
+	the new child into the appropriate node
+	
+	table: pointer to a Table struct for a given DB file
+	parent_page_num: location of the node we're splitting
+	child_page_num: location of the child node
+*/
+void split_internal_node_and_insert_child(Table* table, uint32_t parent_page_num, uint32_t child_page_num) {
+
+  	void* destination_node;
+	void* parent_node_to_split = get_page(table->pager, parent_page_num);
+	void* child_node = get_page(table->pager, child_page_num);
+	uint32_t old_max = get_max_key_in_node(parent_node_to_split);
+	uint32_t child_node_to_insert_max_key = get_max_key_in_node(child_node);
+
+	/* initialize the new node */
+	uint32_t new_page_num = get_unused_page_num(table->pager);
+	void* new_node = get_page(table->pager, new_page_num);
+	initialize_internal_node(new_node);
+	/* the old node's parent becomes the new node's parent */
+	*get_node_parent(new_node) = *get_node_parent(parent_node_to_split);
+
+	/* determine which child nodes should stay in the old node 
+	(half) and which should be moved to the new internal node */
+	for (int32_t i = INTERNAL_NODE_MAX_CELLS; i >= 0; i--) {
+		if (i >= INTERNAL_NODE_LEFT_SPLIT_COUNT) {
+			destination_node = new_node;
+		} else {
+			destination_node = parent_node_to_split;
+		}
+
+		uint32_t index_within_node = i % INTERNAL_NODE_LEFT_SPLIT_COUNT;
+		void* destination = get_internal_node_cell(destination_node, index_within_node);
+		memcpy(destination, get_internal_node_cell(parent_node_to_split, i), INTERNAL_NODE_CELL_SIZE);
+	}
+
+	/* determine which node to insert the new child into */
+	if (get_max_key_in_node(parent_node_to_split) > child_node_to_insert_max_key) {
+		insert_child_into_internal_node(table, parent_page_num, child_page_num);
+	} else {
+		insert_child_into_internal_node(table, new_page_num, child_page_num);
+	}
+	
+	/* update the key count on both internal nodes */
+	*(get_internal_node_num_keys(parent_node_to_split)) = INTERNAL_NODE_LEFT_SPLIT_COUNT;
+	*(get_internal_node_num_keys(new_node)) = INTERNAL_NODE_RIGHT_SPLIT_COUNT;
+
+	/* if the node we're splitting is the root node, create a new
+	root node -- otherwise, update the parent to include the new
+	internal node */
+	if (is_node_root(parent_node_to_split)) {
+		return create_new_root(table, new_page_num);
+	} else {
+		uint32_t parent_page_num = *get_node_parent(parent_node_to_split);
+		uint32_t new_max = get_max_key_in_node(parent_node_to_split);
+		void* parent = get_page(table->pager, parent_page_num);
+		update_internal_node_key(parent, old_max, new_max);
+		insert_child_into_internal_node(table, parent_page_num, new_page_num);
+		return;
+	}
+}
 
 /* sets the value of the is_root cell in the given node using the 
 given boolean -- setter */

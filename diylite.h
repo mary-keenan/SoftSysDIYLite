@@ -34,7 +34,7 @@ at Olin College of Engineering.
 
 /* values related to a Table struct */
 #define PAGE_SIZE 4096 /* OS pages are also 4KB -> DB page is undivided*/
-#define TABLE_MAX_PAGES 100 /* arbitrary limit for now */
+#define TABLE_MAX_PAGES 500 /* arbitrary limit for now */
 
 /* common node headers */
 #define NODE_TYPE_SIZE sizeof(uint8_t)
@@ -88,6 +88,8 @@ https://cstack.github.io/db_tutorial/assets/images/internal-node-format.png
 #define INTERNAL_NODE_CHILD_SIZE sizeof(uint32_t)
 #define INTERNAL_NODE_CELL_SIZE (INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE)
 #define INTERNAL_NODE_MAX_CELLS 3 /* kept small for testing */
+#define INTERNAL_NODE_RIGHT_SPLIT_COUNT ((INTERNAL_NODE_MAX_CELLS + 1) / 2)
+#define INTERNAL_NODE_LEFT_SPLIT_COUNT ((INTERNAL_NODE_MAX_CELLS + 1) - INTERNAL_NODE_RIGHT_SPLIT_COUNT)
 
 /* wrapper needed to store the result of getline() */
 typedef struct InputBuffer_t {
@@ -219,6 +221,7 @@ uint32_t* get_internal_node_child(void* node, uint32_t child_num);
 uint32_t* get_internal_node_key(void* node, uint32_t key_num);
 void update_internal_node_key(void* node, uint32_t old_key, uint32_t new_key);
 void insert_child_into_internal_node(Table* table, uint32_t parent_page_num, uint32_t child_page_num);
+void split_internal_node_and_insert_child(Table* table, uint32_t parent_page_num, uint32_t child_page_num);
 void set_node_root(void* node, bool is_root);
 bool is_node_root(void* node);
 void create_new_root(Table* table, uint32_t right_child_page_num);
