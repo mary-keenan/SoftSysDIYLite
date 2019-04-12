@@ -1,4 +1,4 @@
-## DIY SQLite Report
+## DIY SQLite
 By Mary Keenan
 
 ### Project Goal
